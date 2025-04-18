@@ -61,24 +61,77 @@ The script includes:
 
    - Enables secure authentication between GitHub Actions and AWS
    - Uses GitHub's token service
+   - Trusts GitHub Actions to assume IAM roles
 
 2. **IAM Role**
 
-   - Grants necessary permissions for ECR access
+   - Grants necessary permissions for:
+     - ECR access (push/pull images)
+     - SSM Parameter Store access
+     - Secrets Manager access
    - Used by GitHub Actions for deployment
+   - Includes trust relationship with GitHub OIDC provider
 
 3. **SSM Parameter Store**
 
    - Stores secure database connection URL
-   - Parameter path: `/azni/database/url`
+   - Parameter path: `/azni/config`
    - Type: SecureString
+   - Accessible by ECS tasks and GitHub Actions
+   - Encrypted at rest using AWS KMS
+   - Versioned for change tracking
 
 4. **Secrets Manager**
    - Stores database credentials
-   - Secret name: `myapp/database/credentials`
+   - Secret name: `azni/db_password`
    - Contains username and password
+   - Accessible by ECS tasks and GitHub Actions
+   - Automatically rotated (if configured)
+   - Encrypted at rest using AWS KMS
 
-### 2. GitHub Actions Workflow
+### 2. Managing Parameters and Secrets
+
+#### SSM Parameter Management
+
+View parameter:
+
+```bash
+aws ssm get-parameter --name "/azni/config" --with-decryption
+```
+
+Update parameter:
+
+```bash
+aws ssm put-parameter --name "/azni/config" --value "new-value" --type "SecureString" --overwrite
+```
+
+List parameters:
+
+```bash
+aws ssm describe-parameters --parameter-filters "Key=Name,Values=/azni/config"
+```
+
+#### Secrets Manager Management
+
+View secret:
+
+```bash
+aws secretsmanager get-secret-value --secret-id "azni/db_password"
+```
+
+Update secret:
+
+```bash
+aws secretsmanager update-secret --secret-id "azni/db_password" --secret-string '{"username":"newuser","password":"newpass"}'
+```
+
+List secrets:
+
+```bash
+aws secretsmanager list-secrets --filters "Key=name,Values=azni/db_password"
+```
+
+### 3. GitHub Actions Workflow
 
 The repository includes a GitHub Actions workflow (`.github/workflows/docker-push.yml`) that:
 
@@ -86,10 +139,23 @@ The repository includes a GitHub Actions workflow (`.github/workflows/docker-pus
 - Builds the Docker image
 - Tags the image with both `latest` and the commit SHA
 - Pushes the image to ECR
+- Uses OIDC for secure authentication
 
-The workflow uses OIDC (OpenID Connect) for secure authentication with AWS.
+#### OIDC Authentication
 
-### 3. ECR Repository
+The workflow uses OpenID Connect (OIDC) for secure authentication with AWS. This requires:
+
+1. Proper IAM role configuration:
+
+   - Trust relationship with GitHub OIDC provider
+   - Correct repository name in the trust policy
+   - Necessary permissions for ECR, SSM, and Secrets Manager
+
+2. GitHub Actions permissions:
+   - `id-token: write` permission in the workflow
+   - Correct role ARN in the workflow configuration
+
+### 4. ECR Repository
 
 The Docker images are pushed to:
 
@@ -97,7 +163,7 @@ The Docker images are pushed to:
 255945442255.dkr.ecr.us-east-1.amazonaws.com/azni-flask-private-repository
 ```
 
-### 4. ECS Task Definition
+### 5. ECS Task Definition
 
 The `task-definition.json` file defines the ECS task configuration:
 
@@ -106,6 +172,36 @@ The `task-definition.json` file defines the ECS task configuration:
 - References Secrets Manager for credentials
 - Configures logging to CloudWatch
 - Uses awsvpc network mode
+
+#### Parameter and Secret References
+
+The task definition references parameters and secrets as follows:
+
+1. SSM Parameter:
+
+```json
+"environment": [
+    {
+        "name": "DB_URL",
+        "value": "{{resolve:ssm:/azni/config}}"
+    }
+]
+```
+
+2. Secrets Manager:
+
+```json
+"secrets": [
+    {
+        "name": "DB_USERNAME",
+        "valueFrom": "arn:aws:secretsmanager:us-east-1:255945442255:secret:azni/db_password:username::"
+    },
+    {
+        "name": "DB_PASSWORD",
+        "valueFrom": "arn:aws:secretsmanager:us-east-1:255945442255:secret:azni/db_password:password::"
+    }
+]
+```
 
 ## Local Development
 
@@ -141,10 +237,72 @@ docker run -p 5000:5000 azni-flask-app
 - Sensitive data is stored in SSM Parameter Store and Secrets Manager
 - Database credentials are securely managed and rotated
 - ECS task definition uses secure parameter resolution
+- All secrets and parameters are encrypted at rest
+- Access is controlled through IAM policies
 
 ## Troubleshooting
 
-If you encounter issues:
+### Parameter and Secret Access Issues
+
+If you encounter issues accessing parameters or secrets:
+
+1. Verify IAM permissions:
+
+```bash
+aws iam get-role-policy --role-name ecsTaskExecutionRole --policy-name SSMSecretsAccess
+```
+
+2. Check parameter existence:
+
+```bash
+aws ssm get-parameter --name "/azni/config" --with-decryption
+```
+
+3. Verify secret access:
+
+```bash
+aws secretsmanager get-secret-value --secret-id "azni/db_password"
+```
+
+4. Check task execution role:
+
+```bash
+aws iam get-role --role-name ecsTaskExecutionRole
+```
+
+### OIDC Authentication Issues
+
+If you encounter the error "Not authorized to perform sts:AssumeRoleWithWebIdentity":
+
+1. Verify the IAM role configuration:
+
+```bash
+aws iam get-role --role-name github-actions-role
+```
+
+2. Check the trust policy:
+
+```bash
+aws iam get-role --role-name github-actions-role --query 'Role.AssumeRolePolicyDocument'
+```
+
+3. Ensure the GitHub repository name matches exactly in:
+
+   - The trust policy
+   - The workflow file
+   - The actual repository
+
+4. Verify the OIDC provider:
+
+```bash
+aws iam list-open-id-connect-providers
+```
+
+5. Check GitHub Actions permissions:
+   - Ensure `id-token: write` is set in the workflow
+   - Verify the role ARN is correct
+
+### General Issues
 
 1. Verify the IAM role ARN in the workflow file
 2. Check that the OIDC provider is properly configured

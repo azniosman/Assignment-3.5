@@ -13,17 +13,17 @@
       "environment": [
         {
           "name": "DB_URL",
-          "value": "{{resolve:ssm:/azni/database/url}}"
+          "value": "{{resolve:ssm:/azni/config}}"
         }
       ],
       "secrets": [
         {
           "name": "DB_USERNAME",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:255945442255:secret:myapp/database/credentials:username::"
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:255945442255:secret:azni/db_password:username::"
         },
         {
           "name": "DB_PASSWORD",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:255945442255:secret:myapp/database/credentials:password::"
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:255945442255:secret:azni/db_password:password::"
         }
       ],
       "logConfiguration": {

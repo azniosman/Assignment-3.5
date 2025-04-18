@@ -196,10 +196,10 @@ setup_ssm_parameter() {
     echo -e "${YELLOW}Setting up SSM Parameter...${NC}"
     
     # Check if parameter exists
-    if ! aws ssm get-parameter --name "/azni/database/url" --region ${AWS_REGION} &> /dev/null; then
+    if ! aws ssm get-parameter --name "/azni/config" --region ${AWS_REGION} &> /dev/null; then
         echo "Creating SSM parameter..."
         aws ssm put-parameter \
-            --name "/azni/database/url" \
+            --name "/azni/config" \
             --value "jdbc:mysql://mydb.example.com:3306/mydb" \
             --type "SecureString" \
             --region ${AWS_REGION} || handle_error "Failed to create SSM parameter"
@@ -214,10 +214,10 @@ setup_secrets_manager() {
     echo -e "${YELLOW}Setting up Secrets Manager secret...${NC}"
     
     # Check if secret exists
-    if ! aws secretsmanager describe-secret --secret-id "myapp/database/credentials" --region ${AWS_REGION} &> /dev/null; then
+    if ! aws secretsmanager describe-secret --secret-id "azni/db_password" --region ${AWS_REGION} &> /dev/null; then
         echo "Creating Secrets Manager secret..."
         aws secretsmanager create-secret \
-            --name "myapp/database/credentials" \
+            --name "azni/db_password" \
             --secret-string '{"username":"admin","password":"supersecretpassword"}' \
             --region ${AWS_REGION} || handle_error "Failed to create Secrets Manager secret"
         echo -e "${GREEN}Secrets Manager secret created successfully${NC}"
