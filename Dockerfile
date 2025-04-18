@@ -1,5 +1,5 @@
-# Using latest base image  from DockerHub
-FROM python:latest
+# Using specific Python version
+FROM python:3.9-slim
 
 #Creating working directory inside container#
 WORKDIR /app

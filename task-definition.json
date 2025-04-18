@@ -39,7 +39,7 @@
         },
         {
           "name": "MY_DB_PASSWORD",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:255945442255:secret:azni/db_password"
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:255945442255:secret:azni/db_password:password::"
         }
       ],
       "logConfiguration": {

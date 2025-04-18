@@ -53,9 +53,26 @@ setup_iam_role() {
         return 0
     fi
 
-    # Create trust policy document
-    echo "Creating trust policy document..."
-    cat > /tmp/trust-policy.json << EOF
+    # Create trust policy document for task role (allowing ECS to assume the role)
+    echo "Creating trust policy document for task role..."
+    cat > /tmp/task-trust-policy.json << EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+        }
+    ]
+}
+EOF
+
+    # Create trust policy document for GitHub Actions
+    echo "Creating trust policy document for GitHub Actions..."
+    cat > /tmp/github-trust-policy.json << EOF
 {
     "Version": "2012-10-17",
     "Statement": [
@@ -126,7 +143,7 @@ EOF
         echo "Creating IAM task role..."
         ROLE_ARN=$(aws iam create-role \
             --role-name azni-ecs-xray-taskrole \
-            --assume-role-policy-document file:///tmp/trust-policy.json \
+            --assume-role-policy-document file:///tmp/task-trust-policy.json \
             --query "Role.Arn" \
             --output text) || handle_error "Failed to create IAM task role"
     else
@@ -140,7 +157,33 @@ EOF
         echo "Updating trust policy..."
         aws iam update-assume-role-policy \
             --role-name azni-ecs-xray-taskrole \
-            --policy-document file:///tmp/trust-policy.json || handle_error "Failed to update trust policy"
+            --policy-document file:///tmp/task-trust-policy.json || handle_error "Failed to update trust policy"
+    fi
+
+    # Check if GitHub Actions role already exists
+    echo "Checking if GitHub Actions role already exists..."
+    GITHUB_ROLE_EXISTS=$(aws iam get-role --role-name github-actions-role 2>/dev/null)
+
+    if [ $? -ne 0 ]; then
+        # Create GitHub Actions role if it doesn't exist
+        echo "Creating GitHub Actions role..."
+        GITHUB_ROLE_ARN=$(aws iam create-role \
+            --role-name github-actions-role \
+            --assume-role-policy-document file:///tmp/github-trust-policy.json \
+            --query "Role.Arn" \
+            --output text) || handle_error "Failed to create GitHub Actions role"
+    else
+        echo "GitHub Actions role already exists"
+        GITHUB_ROLE_ARN=$(aws iam get-role \
+            --role-name github-actions-role \
+            --query "Role.Arn" \
+            --output text)
+
+        # Update trust policy
+        echo "Updating GitHub Actions trust policy..."
+        aws iam update-assume-role-policy \
+            --role-name github-actions-role \
+            --policy-document file:///tmp/github-trust-policy.json || handle_error "Failed to update GitHub Actions trust policy"
     fi
 
     # Check if IAM policy already exists
@@ -161,20 +204,20 @@ EOF
         echo "IAM policy already exists: $POLICY_ARN"
     fi
 
-    # Check if policy is already attached to the task role
+    # Check if policy is already attached to the GitHub Actions role
     POLICY_ATTACHED=$(aws iam list-attached-role-policies \
-        --role-name azni-ecs-xray-taskrole \
+        --role-name github-actions-role \
         --query "AttachedPolicies[?PolicyArn=='$POLICY_ARN'].PolicyArn" \
         --output text)
 
     if [ -z "$POLICY_ATTACHED" ]; then
-        # Attach policy to task role if not already attached
-        echo "Attaching policy to task role..."
+        # Attach policy to GitHub Actions role if not already attached
+        echo "Attaching policy to GitHub Actions role..."
         aws iam attach-role-policy \
-            --role-name azni-ecs-xray-taskrole \
-            --policy-arn "$POLICY_ARN" || handle_error "Failed to attach policy to task role"
+            --role-name github-actions-role \
+            --policy-arn "$POLICY_ARN" || handle_error "Failed to attach policy to GitHub Actions role"
     else
-        echo "Policy is already attached to the task role"
+        echo "Policy is already attached to the GitHub Actions role"
     fi
 
     # Check if ECS task execution role exists
@@ -288,7 +331,7 @@ EOF
     fi
 
     # Clean up temporary files
-    rm -f /tmp/trust-policy.json /tmp/permissions-policy.json /tmp/ecs-task-trust-policy.json
+    rm -f /tmp/task-trust-policy.json /tmp/github-trust-policy.json /tmp/permissions-policy.json /tmp/ecs-task-trust-policy.json
 
     echo -e "${GREEN}IAM role and policies created successfully${NC}"
 
@@ -303,24 +346,44 @@ delete_iam_role() {
     # Check if task role exists
     ROLE_EXISTS=$(aws iam get-role --role-name azni-ecs-xray-taskrole 2>/dev/null)
 
-    if [ $? -ne 0 ]; then
+    if [ $? -eq 0 ]; then
+        # Get attached policies
+        ATTACHED_POLICIES=$(aws iam list-attached-role-policies \
+            --role-name azni-ecs-xray-taskrole \
+            --query "AttachedPolicies[*].PolicyArn" \
+            --output text)
+
+        # Detach policies
+        for POLICY_ARN in $ATTACHED_POLICIES; do
+            echo "Detaching policy $POLICY_ARN from task role..."
+            aws iam detach-role-policy \
+                --role-name azni-ecs-xray-taskrole \
+                --policy-arn "$POLICY_ARN" || echo "Failed to detach policy from task role"
+        done
+    else
         echo -e "${GREEN}IAM task role does not exist${NC}"
-        return 0
     fi
 
-    # Get attached policies
-    ATTACHED_POLICIES=$(aws iam list-attached-role-policies \
-        --role-name azni-ecs-xray-taskrole \
-        --query "AttachedPolicies[*].PolicyArn" \
-        --output text)
+    # Check if GitHub Actions role exists
+    GITHUB_ROLE_EXISTS=$(aws iam get-role --role-name github-actions-role 2>/dev/null)
 
-    # Detach policies
-    for POLICY_ARN in $ATTACHED_POLICIES; do
-        echo "Detaching policy $POLICY_ARN from task role..."
-        aws iam detach-role-policy \
-            --role-name azni-ecs-xray-taskrole \
-            --policy-arn "$POLICY_ARN" || handle_error "Failed to detach policy from task role"
-    done
+    if [ $? -eq 0 ]; then
+        # Get attached policies
+        ATTACHED_POLICIES=$(aws iam list-attached-role-policies \
+            --role-name github-actions-role \
+            --query "AttachedPolicies[*].PolicyArn" \
+            --output text)
+
+        # Detach policies
+        for POLICY_ARN in $ATTACHED_POLICIES; do
+            echo "Detaching policy $POLICY_ARN from GitHub Actions role..."
+            aws iam detach-role-policy \
+                --role-name github-actions-role \
+                --policy-arn "$POLICY_ARN" || echo "Failed to detach policy from GitHub Actions role"
+        done
+    else
+        echo -e "${GREEN}GitHub Actions role does not exist${NC}"
+    fi
 
     # Check for and delete custom policies
     CUSTOM_POLICY_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:policy/github-actions-policy"
@@ -391,9 +454,18 @@ delete_iam_role() {
     fi
 
     # Delete task role
-    echo "Deleting task role..."
-    aws iam delete-role \
-        --role-name azni-ecs-xray-taskrole || handle_error "Failed to delete task role"
+    if [ $? -eq 0 ]; then
+        echo "Deleting task role..."
+        aws iam delete-role \
+            --role-name azni-ecs-xray-taskrole || echo "Failed to delete task role"
+    fi
+
+    # Delete GitHub Actions role
+    if [ $? -eq 0 ]; then
+        echo "Deleting GitHub Actions role..."
+        aws iam delete-role \
+            --role-name github-actions-role || echo "Failed to delete GitHub Actions role"
+    fi
 
     echo -e "${GREEN}IAM role and policies deleted successfully${NC}"
 }
