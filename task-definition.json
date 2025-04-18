@@ -1,37 +1,79 @@
 {
-  "family": "myapp-task",
+  "family": "azni-flask-xray-taskdef",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "256",
   "memory": "512",
-  "executionRoleArn": "arn:aws:iam::255945442255:role/ecsTaskExecutionRole",
+  "executionRoleArn": "arn:aws:iam::255945442255:role/azni-ecs-xray-taskexecutionrole",
+  "taskRoleArn": "arn:aws:iam::255945442255:role/azni-ecs-xray-taskrole",
   "containerDefinitions": [
     {
-      "name": "myapp-container",
-      "image": "myapp:latest",
+      "name": "flask-app",
+      "image": "255945442255.dkr.ecr.us-east-1.amazonaws.com/azni-flask-xray-repo:latest",
       "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "hostPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
       "environment": [
         {
-          "name": "DB_URL",
-          "value": "{{resolve:ssm:/azni/config}}"
+          "name": "SERVICE_NAME",
+          "value": "azni-flask-xray-service"
+        },
+        {
+          "name": "AWS_XRAY_DAEMON_ADDRESS",
+          "value": "xray-sidecar:2000"
+        },
+        {
+          "name": "AWS_XRAY_CONTEXT_MISSING",
+          "value": "LOG_ERROR"
         }
       ],
       "secrets": [
         {
-          "name": "DB_USERNAME",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:255945442255:secret:azni/db_password:username::"
+          "name": "MY_APP_CONFIG",
+          "valueFrom": "arn:aws:ssm:us-east-1:255945442255:parameter/azni/config"
         },
         {
-          "name": "DB_PASSWORD",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:255945442255:secret:azni/db_password:password::"
+          "name": "MY_DB_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:255945442255:secret:azni/db_password"
         }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group": "/ecs/myapp",
+          "awslogs-group": "/ecs/azni-flask",
           "awslogs-region": "us-east-1",
           "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "dependsOn": [
+        {
+          "containerName": "xray-sidecar",
+          "condition": "START"
+        }
+      ]
+    },
+    {
+      "name": "xray-sidecar",
+      "image": "amazon/aws-xray-daemon",
+      "essential": false,
+      "portMappings": [
+        {
+          "containerPort": 2000,
+          "hostPort": 2000,
+          "protocol": "udp"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/azni-flask",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs-xray-daemon"
         }
       }
     }

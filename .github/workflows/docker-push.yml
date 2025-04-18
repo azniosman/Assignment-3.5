@@ -7,7 +7,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  ECR_REPOSITORY: 255945442255.dkr.ecr.us-east-1.amazonaws.com/azni-flask-private-repository
+  ECR_REPOSITORY: 255945442255.dkr.ecr.us-east-1.amazonaws.com/azni-flask-xray-repo
 
 jobs:
   build-and-push:
@@ -23,7 +23,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::255945442255:role/github-actions-role
+          role-to-assume: arn:aws:iam::255945442255:role/azni-ecs-xray-taskrole
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActionsSession
 
