@@ -10,7 +10,7 @@ NC='\033[0m' # No Color
 AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-"255945442255"}
 AWS_REGION=${AWS_REGION:-"us-east-1"}
 REPO_NAME=${REPO_NAME:-"azni-flask-private-repository"}
-GITHUB_REPO=${GITHUB_REPO:-"azniosman/Assignment-3.4"}
+GITHUB_REPO=${GITHUB_REPO:-"azniosman/Assignment-3.5"}
 
 # Error handling function
 handle_error() {
