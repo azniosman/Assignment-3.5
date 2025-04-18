@@ -17,11 +17,12 @@ source "$SCRIPT_DIR/modules/vpc.sh"
 source "$SCRIPT_DIR/modules/ecs.sh"
 source "$SCRIPT_DIR/modules/secrets.sh"
 source "$SCRIPT_DIR/modules/iam.sh"
+source "$SCRIPT_DIR/modules/ecr.sh"
 
 # Configuration
 AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-"255945442255"}
 AWS_REGION=${AWS_REGION:-"us-east-1"}
-REPO_NAME=${REPO_NAME:-"azni-flask-private-repository"}
+REPO_NAME=${REPO_NAME:-"azni-flask-xray-repo"}
 GITHUB_REPO=${GITHUB_REPO:-"azniosman/Assignment-3.5"}
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 TASK_DEFINITION_FILE="${PROJECT_ROOT}/task-definition.json"
@@ -412,8 +413,12 @@ setup_all_resources() {
     echo -e "\n${YELLOW}Step 6: Setting up Secrets Manager...${NC}"
     setup_secrets_manager
 
-    # 7. Setup ECS Service (depends on all above)
-    echo -e "\n${YELLOW}Step 7: Setting up ECS Service...${NC}"
+    # 7. Setup ECR Repository (required for ECS task)
+    echo -e "\n${YELLOW}Step 7: Setting up ECR Repository...${NC}"
+    setup_ecr_repository
+
+    # 8. Setup ECS Service (depends on all above)
+    echo -e "\n${YELLOW}Step 8: Setting up ECS Service...${NC}"
     setup_ecs_service
 
     echo -e "\n${GREEN}All resources have been set up successfully!${NC}"
@@ -431,24 +436,28 @@ delete_all_resources() {
     echo -e "\n${YELLOW}Step 2: Deleting ECS Cluster...${NC}"
     delete_ecs_cluster
 
-    # 3. Delete VPC Resources (must be deleted after all dependent resources)
-    echo -e "\n${YELLOW}Step 3: Deleting VPC Resources...${NC}"
+    # 3. Delete ECR Repository
+    echo -e "\n${YELLOW}Step 3: Deleting ECR Repository...${NC}"
+    delete_ecr_repository
+
+    # 4. Delete VPC Resources (must be deleted after all dependent resources)
+    echo -e "\n${YELLOW}Step 4: Deleting VPC Resources...${NC}"
     delete_vpc_resources
 
-    # 4. Delete SSM Parameter
-    echo -e "\n${YELLOW}Step 4: Deleting SSM Parameter...${NC}"
+    # 5. Delete SSM Parameter
+    echo -e "\n${YELLOW}Step 5: Deleting SSM Parameter...${NC}"
     delete_ssm_parameter
 
-    # 5. Delete Secrets Manager Secret
-    echo -e "\n${YELLOW}Step 5: Deleting Secrets Manager Secret...${NC}"
+    # 6. Delete Secrets Manager Secret
+    echo -e "\n${YELLOW}Step 6: Deleting Secrets Manager Secret...${NC}"
     delete_secrets_manager
 
-    # 6. Delete IAM Role
-    echo -e "\n${YELLOW}Step 6: Deleting IAM Role...${NC}"
+    # 7. Delete IAM Role
+    echo -e "\n${YELLOW}Step 7: Deleting IAM Role...${NC}"
     delete_iam_role
 
-    # 7. Delete OIDC Provider
-    echo -e "\n${YELLOW}Step 7: Deleting OIDC Provider...${NC}"
+    # 8. Delete OIDC Provider
+    echo -e "\n${YELLOW}Step 8: Deleting OIDC Provider...${NC}"
     delete_oidc_provider
 
     echo -e "\n${GREEN}All resources have been deleted successfully!${NC}"
@@ -463,18 +472,20 @@ show_menu() {
     echo "4. Setup ECS Cluster"
     echo "5. Setup SSM Parameter"
     echo "6. Setup Secrets Manager"
-    echo "7. Setup ECS Service"
-    echo "8. Setup All Resources (in sequence)"
-    echo "9. Delete SSM Parameter"
-    echo "10. Delete Secrets Manager Secret"
-    echo "11. Delete ECS Service"
-    echo "12. Delete ECS Cluster"
-    echo "13. Delete VPC Resources"
-    echo "14. Delete IAM Role"
-    echo "15. Delete OIDC Provider"
-    echo "16. Delete All Resources (in reverse sequence)"
-    echo "17. Exit"
-    echo -n "Enter your choice [1-17]: "
+    echo "7. Setup ECR Repository"
+    echo "8. Setup ECS Service"
+    echo "9. Setup All Resources (in sequence)"
+    echo "10. Delete SSM Parameter"
+    echo "11. Delete Secrets Manager Secret"
+    echo "12. Delete ECS Service"
+    echo "13. Delete ECS Cluster"
+    echo "14. Delete ECR Repository"
+    echo "15. Delete VPC Resources"
+    echo "16. Delete IAM Role"
+    echo "17. Delete OIDC Provider"
+    echo "18. Delete All Resources (in reverse sequence)"
+    echo "19. Exit"
+    echo -n "Enter your choice [1-19]: "
 }
 
 # Main function
@@ -505,36 +516,42 @@ main() {
                 setup_secrets_manager
                 ;;
             7)
-                setup_ecs_service
+                setup_ecr_repository
                 ;;
             8)
-                setup_all_resources
+                setup_ecs_service
                 ;;
             9)
-                delete_ssm_parameter
+                setup_all_resources
                 ;;
             10)
-                delete_secrets_manager
+                delete_ssm_parameter
                 ;;
             11)
-                delete_ecs_service
+                delete_secrets_manager
                 ;;
             12)
-                delete_ecs_cluster
+                delete_ecs_service
                 ;;
             13)
-                delete_vpc_resources
+                delete_ecs_cluster
                 ;;
             14)
-                delete_iam_role
+                delete_ecr_repository
                 ;;
             15)
-                delete_oidc_provider
+                delete_vpc_resources
                 ;;
             16)
-                delete_all_resources
+                delete_iam_role
                 ;;
             17)
+                delete_oidc_provider
+                ;;
+            18)
+                delete_all_resources
+                ;;
+            19)
                 echo -e "${GREEN}Exiting...${NC}"
                 exit 0
                 ;;

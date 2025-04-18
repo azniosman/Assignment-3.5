@@ -322,9 +322,27 @@ delete_iam_role() {
             --policy-arn "$POLICY_ARN" || handle_error "Failed to detach policy from task role"
     done
 
-    # Delete custom policies
+    # Check for and delete custom policies
     CUSTOM_POLICY_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:policy/github-actions-policy"
     if aws iam get-policy --policy-arn "$CUSTOM_POLICY_ARN" &>/dev/null; then
+        echo "Checking for policy attachments..."
+
+        # Get all roles that have this policy attached
+        ATTACHED_ROLES=$(aws iam list-entities-for-policy \
+            --policy-arn "$CUSTOM_POLICY_ARN" \
+            --entity-filter Role \
+            --query 'PolicyRoles[*].RoleName' \
+            --output text)
+
+        # Detach policy from all roles
+        for ROLE_NAME in $ATTACHED_ROLES; do
+            echo "Detaching policy from role $ROLE_NAME..."
+            aws iam detach-role-policy \
+                --role-name "$ROLE_NAME" \
+                --policy-arn "$CUSTOM_POLICY_ARN" || echo "Failed to detach policy from $ROLE_NAME"
+        done
+
+        # Now delete the policy
         echo "Deleting custom policy..."
         aws iam delete-policy \
             --policy-arn "$CUSTOM_POLICY_ARN" || handle_error "Failed to delete custom policy"
