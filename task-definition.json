@@ -1,0 +1,39 @@
+{
+  "family": "myapp-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::255945442255:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "myapp-container",
+      "image": "myapp:latest",
+      "essential": true,
+      "environment": [
+        {
+          "name": "DB_URL",
+          "value": "{{resolve:ssm:/myapp/database/url}}"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DB_USERNAME",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:255945442255:secret:myapp/database/credentials:username::"
+        },
+        {
+          "name": "DB_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:255945442255:secret:myapp/database/credentials:password::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/myapp",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

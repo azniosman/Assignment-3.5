@@ -1,0 +1,41 @@
+name: Build and Push Docker Image to ECR
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: 255945442255.dkr.ecr.us-east-1.amazonaws.com/azni-flask-private-repository
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::255945442255:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActionsSession
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REPOSITORY:latest .
+          docker push $ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REPOSITORY:latest
