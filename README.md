@@ -70,7 +70,7 @@ The script includes:
 3. **SSM Parameter Store**
 
    - Stores secure database connection URL
-   - Parameter path: `/myapp/database/url`
+   - Parameter path: `/azni/database/url`
    - Type: SecureString
 
 4. **Secrets Manager**

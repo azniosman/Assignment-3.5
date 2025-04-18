@@ -13,7 +13,7 @@
       "environment": [
         {
           "name": "DB_URL",
-          "value": "{{resolve:ssm:/myapp/database/url}}"
+          "value": "{{resolve:ssm:/azni/database/url}}"
         }
       ],
       "secrets": [

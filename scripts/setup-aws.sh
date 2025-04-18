@@ -108,6 +108,30 @@ EOF
 }
 EOF
 
+    # Create SSM and Secrets Manager policy
+    cat > ssm-secrets-policy.json << EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ssm:GetParameter",
+                "ssm:GetParameters"
+            ],
+            "Resource": "arn:aws:ssm:${AWS_REGION}:${AWS_ACCOUNT_ID}:parameter/azni/*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "secretsmanager:GetSecretValue"
+            ],
+            "Resource": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:myapp/database/credentials*"
+        }
+    ]
+}
+EOF
+
     # Create IAM role
     if ! aws iam get-role --role-name github-actions-role &> /dev/null; then
         echo "Creating IAM role..."
@@ -135,17 +159,36 @@ EOF
             --set-as-default || handle_error "Failed to update ECR policy"
     fi
 
+    # Create and attach SSM and Secrets Manager policy
+    if ! aws iam get-policy --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/GitHubActionsSSMSecretsAccess &> /dev/null; then
+        echo "Creating SSM and Secrets Manager policy..."
+        aws iam create-policy \
+            --policy-name GitHubActionsSSMSecretsAccess \
+            --policy-document file://ssm-secrets-policy.json || handle_error "Failed to create SSM and Secrets Manager policy"
+    else
+        echo "Updating SSM and Secrets Manager policy..."
+        aws iam create-policy-version \
+            --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/GitHubActionsSSMSecretsAccess \
+            --policy-document file://ssm-secrets-policy.json \
+            --set-as-default || handle_error "Failed to update SSM and Secrets Manager policy"
+    fi
+
     echo "Attaching ECR policy to role..."
     aws iam attach-role-policy \
         --role-name github-actions-role \
         --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/GitHubActionsECRAccess || handle_error "Failed to attach ECR policy"
+
+    echo "Attaching SSM and Secrets Manager policy to role..."
+    aws iam attach-role-policy \
+        --role-name github-actions-role \
+        --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/GitHubActionsSSMSecretsAccess || handle_error "Failed to attach SSM and Secrets Manager policy"
 
     # Get and display role ARN
     ROLE_ARN=$(aws iam get-role --role-name github-actions-role --query 'Role.Arn' --output text)
     echo -e "${GREEN}Role ARN: ${ROLE_ARN}${NC}"
 
     # Cleanup
-    rm trust-policy.json ecr-policy.json
+    rm trust-policy.json ecr-policy.json ssm-secrets-policy.json
 }
 
 # Setup SSM Parameter
@@ -153,10 +196,10 @@ setup_ssm_parameter() {
     echo -e "${YELLOW}Setting up SSM Parameter...${NC}"
     
     # Check if parameter exists
-    if ! aws ssm get-parameter --name "/myapp/database/url" --region ${AWS_REGION} &> /dev/null; then
+    if ! aws ssm get-parameter --name "/azni/database/url" --region ${AWS_REGION} &> /dev/null; then
         echo "Creating SSM parameter..."
         aws ssm put-parameter \
-            --name "/myapp/database/url" \
+            --name "/azni/database/url" \
             --value "jdbc:mysql://mydb.example.com:3306/mydb" \
             --type "SecureString" \
             --region ${AWS_REGION} || handle_error "Failed to create SSM parameter"
